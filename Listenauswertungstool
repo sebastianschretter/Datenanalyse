@@ -75,7 +75,9 @@ def analyze_data():
         ax.bar(hall_data['Anlage'], hall_data['Anzahl der Vorkommnisse'])
         canvas = FigureCanvasTkAgg(fig, master=chart_inner_frame)
         canvas.draw()
-        canvas.get_tk_widget().grid(row=i // 2, column=i % 2)
+        rows = int(chart_inner_frame.winfo_height() / 300)  # Angenommene Höhe einer Grafik
+        cols = int(chart_inner_frame.winfo_width() / 400)   # Angenommene Breite einer Grafik
+        canvas.get_tk_widget().grid(row=i // cols, column=i % cols)
         plt.close(fig)
 
 def extract_anlage(meldungsname):
@@ -195,13 +197,18 @@ chart_h_scroll = tk.Scrollbar(frame, orient="horizontal", command=chart_canvas.x
 chart_canvas.configure(yscrollcommand=chart_v_scroll.set, xscrollcommand=chart_h_scroll.set)
 
 chart_canvas.grid(row=5, column=0, columnspan=5, sticky="nsew")
+frame.grid_rowconfigure(5, weight=1)
+frame.grid_columnconfigure(0, weight=1)
 chart_v_scroll.grid(row=5, column=5, sticky="ns")
 chart_h_scroll.grid(row=6, column=0, columnspan=5, sticky="ew")
 
 chart_inner_frame = tk.Frame(chart_canvas)
 chart_canvas.create_window((0, 0), window=chart_inner_frame, anchor="nw")
 
-chart_inner_frame.bind("<Configure>", lambda e: chart_canvas.configure(scrollregion=chart_canvas.bbox("all")))
+def update_scrollregion(event):
+    chart_canvas.configure(scrollregion=chart_canvas.bbox("all"))
+
+chart_inner_frame.bind("<Configure>", update_scrollregion)
 
 # Zusätzliche Grid-Konfigurationen
 frame.grid_rowconfigure(5, weight=1)
