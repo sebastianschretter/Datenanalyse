@@ -1,0 +1,214 @@
+import tkinter as tk
+from tkinter import ttk
+from tkinter.filedialog import askopenfilename
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import re
+
+anlage_grund = {}
+global_df = None 
+
+def open_file():
+    filepath = askopenfilename(filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")])
+    if not filepath:
+        return
+    csv_entry.delete(0, tk.END)
+    csv_entry.insert(0, filepath)
+    analyze_data()
+
+def update_anlage_list():
+    global global_df
+    df = global_df
+    tree.delete(*tree.get_children())  # Löscht alle Einträge im Treeview
+    filter_halle = halle_combobox.get()
+    filter_stoerung = filter_combobox.get()
+
+    if filter_halle != "Alle":
+        df = df[df['Halle'] == filter_halle]
+
+    if filter_stoerung != "Alle":
+        df = df[df['Störung'] == filter_stoerung]
+
+    grouped = df.groupby('Anlage').size().reset_index(name='Anzahl der Vorkommnisse')
+    for index, row in grouped.iterrows():
+        tree.insert("", tk.END, values=(row['Anlage'], row['Anzahl der Vorkommnisse']))
+
+
+def analyze_data():
+    global global_df
+    filepath = csv_entry.get()
+    if not filepath:
+        return
+    global_df = pd.read_csv(filepath, delimiter=";")
+    global_df['Halle'] = global_df['Meldungsname'].str.extract(r'(H\d+[a-z]?)')[0]
+    global_df['Anlage'] = global_df['Meldungsname'].apply(extract_anlage)
+    global_df['Störung'] = global_df['Meldungsname'].str[-2:]
+
+    df = global_df  # Verwendung der globalen DataFrame
+
+    update_anlage_list()
+
+    filter_halle = halle_combobox.get()
+    filter_stoerung = filter_combobox.get()
+    if filter_halle != "Alle":
+        df = df[df['Halle'] == filter_halle]
+    if filter_stoerung != "Alle":
+        df = df[df['Störung'] == filter_stoerung]
+
+    unique_halls = df['Halle'].unique()
+    halle_combobox['values'] = ["Alle"] + list(unique_halls)
+    unique_stoerungen = df['Störung'].unique()
+    filter_combobox['values'] = ["Alle"] + list(unique_stoerungen)
+
+    result = df.groupby(['Halle', 'Anlage']).size().reset_index(name='Anzahl der Vorkommnisse')
+    unique_halls = result['Halle'].unique()
+
+    clear_results()
+
+    for i, hall in enumerate(unique_halls):
+        hall_data = result[result['Halle'] == hall]
+        #tk.Label(overview_frame, text=f"Halle {hall}").grid(row=i, column=0, columnspan=4)
+
+        fig, ax = plt.subplots(figsize=(6, 3))
+        ax.set_title(f'Anlagen in Halle {hall}')
+        ax.bar(hall_data['Anlage'], hall_data['Anzahl der Vorkommnisse'])
+        canvas = FigureCanvasTkAgg(fig, master=chart_inner_frame)
+        canvas.draw()
+        canvas.get_tk_widget().grid(row=i // 2, column=i % 2)
+        plt.close(fig)
+
+def extract_anlage(meldungsname):
+    parts = meldungsname.split(".")
+    if len(parts) >= 5:
+        return parts[4].replace('_', ' ')
+    else:
+        return "Unbekannt"
+
+def clear_results():
+    for widget in chart_inner_frame.winfo_children():
+        widget.destroy()
+
+def on_filter_change(event):
+    update_anlage_list()
+
+def update_textbox(event):
+    selected = tree.selection()  # Liste der ausgewählten Elemente
+    if not selected:  # Überprüfung, ob die Liste leer ist
+        return
+    item = selected[0]  # Erstes ausgewähltes Element
+    anlage, _ = tree.item(item, 'values')
+    anlage_text.delete(1.0, tk.END)  # Textbox leeren
+    if anlage in anlage_grund:  # Überprüfen, ob ein Grund für die Anlage gespeichert ist
+        anlage_text.insert(tk.END, anlage_grund[anlage])
+
+def save_text():
+    item = tree.selection()[0]  # Erstes ausgewähltes Element
+    anlage, _ = tree.item(item, 'values')
+    grund = anlage_text.get(1.0, tk.END).strip()  # Text aus der Textbox holen
+    anlage_grund[anlage] = grund  # Grund speichern
+
+def delete_text():
+    item = tree.selection()[0]  # Erstes ausgewähltes Element
+    anlage, _ = tree.item(item, 'values')
+    if anlage in anlage_grund:  # Überprüfen, ob ein Grund für die Anlage gespeichert ist
+        del anlage_grund[anlage]  # Grund löschen
+    anlage_text.delete(1.0, tk.END)  # Textbox leeren
+
+
+root = tk.Tk()
+root.title("Datenanalyse")
+
+frame = tk.Frame(root)
+frame.pack(fill=tk.BOTH, expand=1, padx=20, pady=20)
+
+csv_label = tk.Label(frame, text="CSV-Datei:")
+csv_label.grid(row=0, column=0, sticky='e')
+
+csv_entry = tk.Entry(frame, width=50)
+csv_entry.grid(row=0, column=1)
+
+open_button = tk.Button(frame, text="Datei öffnen", command=open_file)
+open_button.grid(row=0, column=2)
+
+analyze_button = tk.Button(frame, text="Daten analysieren", command=analyze_data)
+analyze_button.grid(row=0, column=3)
+
+filter_label = tk.Label(frame, text="Störungsmeldung:")
+filter_label.grid(row=1, column=0, sticky='e')
+
+filter_combobox = ttk.Combobox(frame, values=["Alle"], state="readonly")
+filter_combobox.current(0)
+filter_combobox.grid(row=1, column=1)
+
+halle_label = tk.Label(frame, text="Filter Halle:")
+halle_label.grid(row=2, column=0, sticky='e')
+
+halle_combobox = ttk.Combobox(frame, values=["Alle"], state="readonly")
+halle_combobox.current(0)
+halle_combobox.grid(row=2, column=1)
+
+info_frame = tk.Frame(frame)
+info_frame.grid(row=4, column=0, columnspan=4, sticky="nsew")
+
+halle_combobox.bind('<<ComboboxSelected>>', on_filter_change)
+filter_combobox.bind('<<ComboboxSelected>>', on_filter_change)
+
+left_heading = tk.Label(info_frame, text="Anlagen und Anzahl der Vorkommnisse")
+left_heading.grid(row=0, column=0)
+
+right_headingleftcolumn = tk.Label(info_frame, text="Begründung")
+right_headingleftcolumn.grid(row=0, column=1)
+
+tree = ttk.Treeview(info_frame, columns=("Anlage", "Anzahl"), show="headings")
+tree.heading("Anlage", text="Anlage")
+tree.heading("Anzahl", text="Anzahl")
+tree.grid(row=1, column=0, sticky="nsew")
+
+anlage_text = tk.Text(info_frame, height=10, width=30)
+anlage_text.grid(row=1, column=1, sticky="nsew")
+
+save_button = tk.Button(info_frame, text="Grund speichern", command=save_text)
+save_button.grid(row=2, column=1, sticky="ew")  # sticky option changed to "ew"
+
+delete_button = tk.Button(info_frame, text="Grund löschen", command=delete_text)
+delete_button.grid(row=3, column=1, sticky="ew")  # sticky option changed to "ew"
+
+# Ereignis für die Auswahl von Elementen im Treeview binden
+tree.bind("<<TreeviewSelect>>", update_textbox)
+
+# Scrollbar für das Treeview-Widget (vertikal und horizontal)
+v_scrollbar = tk.Scrollbar(info_frame, orient="vertical")
+h_scrollbar = tk.Scrollbar(info_frame, orient="horizontal")
+v_scrollbar.grid(row=1, column=2, sticky="ns")
+h_scrollbar.grid(row=2, column=0, sticky="ew")
+
+tree.config(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
+v_scrollbar.config(command=tree.yview)
+h_scrollbar.config(command=tree.xview)
+
+# Canvas und Scrollbars (jetzt für beide Achsen)
+chart_canvas = tk.Canvas(frame, bg='white')
+chart_v_scroll = tk.Scrollbar(frame, orient="vertical", command=chart_canvas.yview)
+chart_h_scroll = tk.Scrollbar(frame, orient="horizontal", command=chart_canvas.xview)
+
+chart_canvas.configure(yscrollcommand=chart_v_scroll.set, xscrollcommand=chart_h_scroll.set)
+
+chart_canvas.grid(row=5, column=0, columnspan=5, sticky="nsew")
+chart_v_scroll.grid(row=5, column=5, sticky="ns")
+chart_h_scroll.grid(row=6, column=0, columnspan=5, sticky="ew")
+
+chart_inner_frame = tk.Frame(chart_canvas)
+chart_canvas.create_window((0, 0), window=chart_inner_frame, anchor="nw")
+
+chart_inner_frame.bind("<Configure>", lambda e: chart_canvas.configure(scrollregion=chart_canvas.bbox("all")))
+
+# Zusätzliche Grid-Konfigurationen
+frame.grid_rowconfigure(5, weight=1)
+frame.grid_columnconfigure(0, weight=1)
+
+info_frame.grid_rowconfigure(1, weight=1)
+info_frame.grid_columnconfigure(0, weight=1)
+info_frame.grid_columnconfigure(1, weight=1)
+
+root.mainloop()
