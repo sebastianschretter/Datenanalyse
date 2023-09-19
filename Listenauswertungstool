@@ -1,123 +1,279 @@
-import pandas as pd
+# Libary Import
 import tkinter as tk
-from tkinter import filedialog, ttk
-from tkinter import messagebox
-import re
+from tkinter import ttk
+from tktooltip import ToolTip
 from tkinter import filedialog
+import tkinter.font as tkFont
+from tkinter import messagebox
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.backends.backend_pdf
+import pandas as pd
+import re
+import datetime
+
+
+
 
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.sort_order = "asc"
         self.title("CSV Analyse Tool")
         self.df = None
-        
-        # Titel für das Programm
-        self.program_title = tk.Label(self, text="PIMS-Auswertungstool", font=("Arial", 24))
-        self.program_title.grid(row=0, column=0, columnspan=3, pady=(10, 30))
+        self.canvas_widgets = []
+        self.geometry('800x600')
 
-        # Frame für den oberen Bereich (Buttons und Labels)
-        self.top_frame = tk.Frame(self)
-        self.top_frame.grid(row=1, column=0, columnspan=3, pady=20, padx=10, sticky='ew') 
-        self.top_frame.grid_columnconfigure(0, weight=1)
-        self.top_frame.grid_columnconfigure(1, weight=1)
-        self.top_frame.grid_columnconfigure(2, weight=1)
+        # Set up the row configurations
+        self.grid_rowconfigure(0, weight=0)  # Top layout (1/4)
+        self.grid_rowconfigure(1, weight=1)  # Body layout (2/4)
 
-        # Hinweis-Text und Button zum Öffnen von CSV (Links)
-        self.load_file_label = tk.Label(self.top_frame, text="Datei zur Auswertung laden:")
-        self.load_file_label.grid(row=0, column=0, sticky='w', pady=(0,10))
+        self.columnconfigure(0, weight=1)
 
-        self.btn_open = tk.Button(self.top_frame, text="CSV öffnen", command=self.open_csv)
-        self.btn_open.grid(row=1, column=0, sticky='w')
+        self.top_layout()
+        self.body_layout()
+    # Alle Funktionen für das Seiten Design
+    # Funktion für das Layout Design im 1/4
+    def top_layout(self):
+        top_frame = tk.Frame(self, bg="#f0f0f0")
+        top_frame.grid(row=0, sticky="nsew", padx=10, pady=(10,5))
+        top_frame.columnconfigure((0,1,2), weight=1)
 
-        self.file_entry = tk.Entry(self.top_frame, bd=1, relief="solid", state='readonly') 
-        self.file_entry.grid(row=2, column=0, padx=(0,10), sticky='ew')
+        # Title in the top_layout
+        self.program_title = tk.Label(top_frame, text="PIMS-Auswertungstool", font=("Arial", 24), bg="#f0f0f0")
+        self.program_title.grid(row=0, column=0, columnspan=3, pady=(10, 30), padx=10, sticky='ew')
 
-        self.btn_reset = tk.Button(self.top_frame, text="Reset", command=self.reset_program)
-        self.btn_reset.grid(row=3, column=0, sticky='w')
+        # Separate frames for left, middle, right sections
+        left_frame = tk.Frame(top_frame, bg="#f0f0f0")
+        left_frame.grid(row=1, column=0, padx=10)
+        left_frame.columnconfigure(0, weight=1) 
+        left_frame.columnconfigure(1, weight=1)  
+        mid_frame = tk.Frame(top_frame, bg="#f0f0f0")
+        mid_frame.grid(row=1, column=1, padx=10)
+        right_frame = tk.Frame(top_frame, bg="#f0f0f0")
+        right_frame.grid(row=1, column=2, padx=10)
 
-        # Exportieren Button (Mitte)
-        # Hinweis-Text 
-        self.load_file_label = tk.Label(self.top_frame, text="Datei exportieren:")
-        self.load_file_label.grid(row=0, column=1, sticky='ew', pady=(0,10))
-        
-        self.btn_export = tk.Button(self.top_frame, text="Exportieren", command=self.export_to_excel)
-        self.btn_export.grid(row=1, column=1)
+        # CSV Datei öffnen (Links)
+        self.csv_open_label = tk.Label(left_frame, text="Tagesauswertung starten:", font=("Arial", 14), bg="#f0f0f0")
+        self.csv_open_label.grid(row=0, columnspan=2, sticky='w', pady=(0,10))
+        self.btn_open = ttk.Button(left_frame, text="CSV öffnen", command=self.open_csv)
+        self.btn_open.grid(row=1, column=0, sticky='ew', padx=(0, 5))
+        self.btn_open_tooltip = ToolTip(self.btn_open, "Klicken um CSV für die Tagesauswertung zu laden.")
+        self.csv_entry = tk.Entry(left_frame)
+        self.csv_entry.grid(row=1, column=1, sticky='ew', padx=(5, 0))
 
-        # Zukünftiger Gesamtauswertung Button (Rechts)
-        # Hinweis-Text
-        self.load_file_label = tk.Label(self.top_frame, text="Gesamtauswertung starten:")
-        self.load_file_label.grid(row=0, column=2, sticky='e', pady=(0,10))
-        
-        self.btn_total_evaluation = tk.Button(self.top_frame, text="Gesamtauswertung", command=self.gesamtauswertung)
-        self.btn_total_evaluation.grid(row=1, column=2, sticky='e')
+        # Exportieren (Mitte)
+        self.export_label = tk.Label(mid_frame, text="Datei exportieren:", font=("Arial", 14), bg="#f0f0f0")
+        self.export_label.grid(row=0, sticky='w', pady=(0,10))
+        self.btn_export = ttk.Button(mid_frame, text="Exportieren", command=self.export_to_excel)
+        self.btn_export.grid(row=1, sticky='ew')
+        self.btn_export_tooltip = ToolTip(self.btn_export, "Die analysierten Daten in eine Datei exportieren, um sie später in der Gesamtauswertung verwenden zu können")
+
+        # Gesamtauswertung (Rechts)
+        self.evaluation_label = tk.Label(right_frame, text="Gesamtauswertung starten:", font=("Arial", 14), bg="#f0f0f0")
+        self.evaluation_label.grid(row=0, sticky='w', pady=(0,10))
+        self.btn_total_evaluation = ttk.Button(right_frame, text="Gesamtauswertung", command=self.gesamtauswertung)
+        self.btn_total_evaluation.grid(row=1, sticky='ew')
+        self.btn_total_evaluation_tooltip = ToolTip(self.btn_total_evaluation, "Eine Gesamtauswertung für alle geladenen Daten durchführen.")
+    # Funktionen für die Infos bei den Buttons im TOP Layout
+    def show_tooltip(self, event=None):
+            """Erzeugen und zeigen den Tooltip."""
+            x, y, _, _ = self.widget.bbox("insert")
+            x += self.widget.winfo_rootx() + 25
+            y += self.widget.winfo_rooty() + 25
+            # Erzeugt das Tooltip-Fenster
+            self.tooltip_window = tk.Toplevel(self.widget)
+            self.tooltip_window.wm_overrideredirect(True) 
+            self.tooltip_window.wm_geometry(f"+{x}+{y}")
+            label = tk.Label(self.tooltip_window, text=self.text, background="yellow", wraplength=self.wrap_length)
+            label.pack(ipadx=1)
+    def hide_tooltip(self, event=None):
+        """Verstecke den Tooltip."""
+        if self.tooltip_window:
+            self.tooltip_window.destroy()
+            self.tooltip_window = None
+        if self.id:
+            self.widget.after_cancel(self.id)
+            self.id = None
+
+    # Funktion für das Layout Desing in den restlichen 3/4
+    def body_layout(self):
+        # Haupt-Frame für die Tabelle, den Scrollbar, die Kommentarspalte und den Canvas
+        body_frame = tk.Frame(self, bg="#f0f0f0")
+        body_frame.grid(row=1, sticky="nsew", padx=10, pady=(5,10))
+        body_frame.grid_rowconfigure(0, weight=1)
+        body_frame.grid_columnconfigure(0, weight=10)  # Treeview
+        body_frame.grid_columnconfigure(1, weight=0)  # Scrollbar (Gewichtung auf 0 setzen, damit es minimalen Platz einnimmt)
+        body_frame.grid_columnconfigure(2, weight=5)  # Kommentarspalte
+        body_frame.grid_columnconfigure(3, weight=15)  # Canvas
 
         # Treeview für die Tabelle
-        self.tree = ttk.Treeview(self, columns=('Halle', 'Anlage', 'Anzahl', 'Störungskürzel'), show='headings')
-        self.tree.heading('Halle', text='Halle')
-        self.tree.heading('Anlage', text='Anlage')
-        self.tree.heading('Anzahl', text='Anzahl', command=lambda: self.sort_by_anzahl())
-        self.tree.heading('Störungskürzel', text='Störungskürzel')
-        self.tree.grid(row=2, column=0, padx=10, sticky='nsew')
-
-        # Scrollbar für die Tabelle 
-        self.scrollbar = ttk.Scrollbar(self, orient='vertical', command=self.tree.yview)
-        self.tree.configure(yscrollcommand=self.scrollbar.set)
-        self.scrollbar.grid(row=2, column=1, sticky='ns')
-
-        # Textfeld rechts von der Tabelle
-        self.text_entry = tk.Text(self, width=30)
-        self.text_entry.grid(row=2, column=2, padx=10, pady=10, sticky='nsew')
-
-        # Wörterbuch zum Speichern von Kommentaren
-        self.comments = {}
+        self.tree = ttk.Treeview(body_frame, columns=('Halle', 'Anlage', 'Anzahl', 'Störungskürzel'), show='headings')
         
-        # Frame für die Kommentar-Buttons
-        comment_buttons_frame = tk.Frame(self)
-        comment_buttons_frame.grid(row=3, column=2, sticky='ew')
-
-        # Buttons für Kommentar-Funktionen
-        # Speichern-Button
-        self.btn_save_comment = tk.Button(comment_buttons_frame, text="Speichern", command=self.save_comment)
-        self.btn_save_comment.grid(row=1, column=0, sticky='ew', padx=(10,5), pady=(5,5))
-
-        # Löschen-Button
-        self.btn_delete_comment = tk.Button(comment_buttons_frame, text="Löschen", command=self.delete_comment)
-        self.btn_delete_comment.grid(row=1, column=1, sticky='ew', padx=(5,10), pady=(5,5))
+        columns = [('Halle', 'Halle'), ('Anlage', 'Anlage'), ('Anzahl', 'Anzahl'), ('Störungskürzel', 'Störungskürzel')]
+        for col_id, col_name in columns:
+            width = self.get_text_width(col_name)
+            self.tree.column(col_id, width=width)
+            self.tree.heading(col_id, text=col_name)
         
+        self.tree.grid(row=0, column=0, sticky='nsew')
+        
+        self.tree.bind("<Button-1>", self.on_heading_click)
+
+        # Filter-Frame direkt unter der Treeview
+        filter_frame = tk.Frame(body_frame, bg="#f0f0f0")
+        filter_frame.grid(row=1, column=0, sticky='ew', pady=10)
+        filter_frame.columnconfigure(0, weight=1)  # Gibt der ersten Combobox die Hälfte der Breite
+        filter_frame.columnconfigure(1, weight=1)  # Gibt der zweiten Combobox die andere Hälfte der Breite
+        filter_frame.columnconfigure(2, weight=1)  # Gibt der dritten Combobox das letze drittel
+
+        # Filter-Komboboxen und Label in Filter Frame
+        self.filter_label_halle = tk.Label(filter_frame, text="Halle filtern:")
+        self.filter_label_halle.grid(row=0, column=0, padx=10, sticky='w')
+        self.combo_halle = ttk.Combobox(filter_frame, values=[], state="readonly")
+        self.combo_halle.grid(row=1, column=0, padx=10, sticky='ew')
+
+        self.filter_label_sk = tk.Label(filter_frame, text="Störungskürzel filtern:")
+        self.filter_label_sk.grid(row=0, column=1, padx=10, sticky='w')
+        self.combo_sk = ttk.Combobox(filter_frame, values=[], state="readonly")
+        self.combo_sk.grid(row=1, column=1, padx=10, sticky='ew')
+        
+        self.filter_label_anlage = tk.Label(filter_frame, text="Anlage filtern:")
+        self.filter_label_anlage.grid(row=0, column=2, padx=10, sticky='w')
+        self.combo_anlagen = ttk.Combobox(filter_frame, values=[], state="readonly")
+        self.combo_anlagen.grid(row=1, column=2, padx=10, sticky='ew')
+        
+        
+        # Button zum Anwenden des Filters
+        self.btn_apply_filter = ttk.Button(filter_frame, text="Filter anwenden", command=self.apply_filters)
+        self.btn_apply_filter.grid(row=2, column=0, columnspan=3, padx=10, pady=(10, 0), sticky='ew')
+
+        # Scrollbar für die Treeview
+        scrollbar = ttk.Scrollbar(body_frame, orient="vertical", command=self.tree.yview)
+        scrollbar.grid(row=0, column=1, sticky='ns')
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        
+        # Buttons für das Speichern/Löschen von Kommentaren
+        self.tree.bind("<<TreeviewSelect>>", self.on_tree_select)
+        
+        # Frame für die Kommentar-Buttons direkt unterhalb des Text-Eingabefeldes
+        comment_buttons_frame = tk.Frame(body_frame)
+        comment_buttons_frame.grid(row=1, column=2, sticky='ew')
+            
         # Einstellen, dass Buttons mit Spalte wachsen
         # Dies stellt sicher, dass die Spalten im comment_buttons_frame mitwachsen
         comment_buttons_frame.grid_columnconfigure(0, weight=1)
         comment_buttons_frame.grid_columnconfigure(1, weight=1)
 
-        # Klick-Event für die Treeview
-        self.tree.bind('<ButtonRelease-1>', self.on_tree_select)
+        # Wörterbuch zum Speichern von Kommentaren
+        self.comments = {}
 
-        # Einstellen, dass die Spalten und Zeilen mit der Fenstergröße wachsen
-        self.grid_rowconfigure(1, weight=1)
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_columnconfigure(2, weight=1)
+        # Buttons für Kommentar-Funktionen
+        # Speichern-Button
+        self.btn_save_comment = ttk.Button(comment_buttons_frame, text="Speichern", command=self.save_comment)
+        self.btn_save_comment.grid(row=0, column=0, sticky='ew', padx=5, pady=5)
 
-        # Filter-Komboboxen und Label erstellen
-        self.filter_label_halle = tk.Label(self, text="Halle filtern:")
-        self.filter_label_halle.grid(row=3, column=0, padx=10, sticky='w')
-
-        self.combo_halle = ttk.Combobox(self, values=[], state="readonly")
-        self.combo_halle.grid(row=4, column=0, padx=10, sticky='ew')
-
-        self.filter_label_sk = tk.Label(self, text="Störungskürzel filtern:")
-        self.filter_label_sk.grid(row=5, column=0, padx=10, sticky='w')
-
-        self.combo_sk = ttk.Combobox(self, values=[], state="readonly")
-        self.combo_sk.grid(row=6, column=0, padx=10, sticky='ew')
-
-        # Filter-Schaltfläche
-        self.btn_filter = tk.Button(self, text="Filtern", command=self.apply_filters)
-        self.btn_filter.grid(row=7, column=0, padx=10, pady=10, sticky='e')
-
-    # Tagesauswertung
-    def analyse_meldungsname(self, csv_path):
+        # Löschen-Button
+        self.btn_delete_comment = ttk.Button(comment_buttons_frame, text="Löschen", command=self.delete_comment)
+        self.btn_delete_comment.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
         
+        # Button zum Reset der Anwendung
+        self.btn_reset = ttk.Button(comment_buttons_frame, text="Zurücksetzen", command=self.reset)
+        self.btn_reset.grid(row=1, column=0, columnspan=2, padx=10, pady=(10, 0), sticky='ew')
+
+        # Kommentarspalte
+        self.comment_entry = tk.Text(body_frame, wrap=tk.WORD, width=15)  
+        self.comment_entry.grid(row=0, column=2, sticky='nsew', padx=5)
+
+        # Canvas mit Scrollbar
+        self.canvas = tk.Canvas(body_frame, bg="#e0e0e0") 
+        self.canvas.grid(row=0, column=3, sticky='nsew')
+
+        canvas_scrollbar = ttk.Scrollbar(body_frame, orient="vertical", command=self.canvas.yview)
+        canvas_scrollbar.grid(row=0, column=4, sticky='ns')
+        self.canvas.configure(yscrollcommand=canvas_scrollbar.set)
+
+        # Inneres Frame, das die eigentliche Grafik enthält
+        self.inner_frame = tk.Frame(self.canvas)
+        self.canvas.create_window((0, 0), window=self.inner_frame, anchor='nw')
+
+        self.inner_frame.bind('<Configure>', self.on_frame_configure)
+        
+        # Frame für die Grafische Auswertung
+        graph_eval_frame = tk.Frame(body_frame, bg="#f0f0f0")
+        graph_eval_frame.grid(row=1, column=3, sticky='ew')
+        graph_eval_frame.columnconfigure(0, weight=1)  # Lässt die Buttons mit der Breite des Frames wachsen
+
+        # Button für die Grafische Auswertung
+        self.btn_graph_eval = ttk.Button(graph_eval_frame, text="Grafische Auswertung", command=self.graphic_evaluation)
+        self.btn_graph_eval.grid(row=0, column=0, sticky='ew', padx=10, pady=5)  # Beachten Sie, dass der row-Wert auf 0 geändert wurde
+
+        # Button für Export der Grafischen Auswertung
+        self.btn_graph_eval_export = ttk.Button(graph_eval_frame, text="Grafische Auswertung exportieren", command=self.graphic_evaluation_export)
+        self.btn_graph_eval_export.grid(row=1, column=0, sticky='ew', padx=10, pady=5)  # Beachten Sie, dass der row-Wert auf 1 geändert wurde
+
+
+    # Alle Funktionen für das Layout 
+    # Funktion um Spalten anzupassen
+    def get_text_width(self, text):
+        font = tkFont.Font(family='Arial', size=14)  # Dies sollte dem Font Ihrer Treeview entsprechen
+        return font.measure(text) + 10  # Ein bisschen zusätzlicher Platz
+
+    # Funktion zum Anpassen des Canvas bei Aktualisierung
+    def on_frame_configure(self, event=None):
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    # Funktion zum Sortieren der Einträge der Spalte "Anlage"
+    def on_heading_click(self, event):
+        column = self.tree.identify_column(event.x)
+        region = self.tree.identify_region(event.x, event.y)
+        
+        if region == "heading" and column == "#3":  # "#3" ist die interne Bezeichnung für die dritte Spalte (Anzahl)
+            # Toggle zwischen aufsteigender und absteigender Sortierung
+            self.sort_by_column_ascending = not getattr(self, 'sort_by_column_ascending', True)
+            ascending = self.sort_by_column_ascending
+
+            # Erhalte die Werte aus der Spalte
+            data = [(self.tree.set(child, column), child) for child in self.tree.get_children('')]
+            
+            # Sortiere die Daten
+            data.sort(key=lambda t: int(t[0]), reverse=not ascending)
+
+            # Organisiere die Einträge nach der Sortierung
+            for idx, (val, child) in enumerate(data):
+                self.tree.move(child, '', idx)
+
+
+            
+    # Alle Funktionen für die Anwendung,
+    # CSV - Datei laden
+    def open_csv(self):
+        file_path = filedialog.askopenfilename()
+
+        # Überprüfen Sie, ob Daten bereits geladen sind
+        if self.df is not None:
+            response = messagebox.askyesno("Warnung", "Es sind bereits Daten geladen. Möchten Sie diese Daten überschreiben?")
+            if not response:  
+                return
+            else:
+                self.reset() 
+
+        if file_path:
+            # Zeige den Dateinamen im Textfeld an
+            filename = file_path.split("/")[-1]
+            self.csv_entry.config(state='normal')
+            self.csv_entry.delete(0, tk.END)
+            self.csv_entry.insert(0, filename)
+            self.csv_entry.config(state='readonly')
+
+            # Aufrufen der tagesauswertung Funktion
+            result_df = self.tagesauswertung(file_path)
+            
+            self.display_data_in_treeview(result_df)
+            self.df = result_df
+            self.update_comboboxes()
+
+    # Funktion für die Tagesauswertung
+    def tagesauswertung(self, csv_path):
         def get_störungskürzel(priority):
             if priority in ["14", "15", "16"]:
                 return "ST"
@@ -131,15 +287,12 @@ class App(tk.Tk):
                 return "SO"
 
         def extract_anlage_name_from_pcs7(name):
-            # Extrahiere Priorität
             prioritaet_match = re.search(r'\.(\d{1,2})\.', name)
             prioritaet = int(prioritaet_match.group(1)) if prioritaet_match else None
 
-            # Extrahiere Halle
             halle_match = re.search(r'VIH\+([^\.]+)', name)
             halle = halle_match.group(1) if halle_match else None
 
-            # Anlage Extrahieren
             anlage_match = re.search(r'_._[A-Z0-9]{4}_([A-Za-z0-9_]+_[A-Za-z0-9_]+?)(?:_\d|_)', name)
             if anlage_match:
                 anlage_raw = anlage_match.group(1).replace('_', ' ')
@@ -159,7 +312,6 @@ class App(tk.Tk):
         analysis_result = []
 
         for name in meldungsname:
-            # Verarbeitung der SiclilmatX - Meldungen
             if name.startswith("H") and name[1:3].isdigit():
                 try:
                     parts = name.split('.')
@@ -175,8 +327,7 @@ class App(tk.Tk):
                 try:
                     parts = name.split('.')
                     standort = parts[4].split('+')[1].split('.')[0]
-                    
-                    # Wenn der Standort "B13a" ist, wird er in "H13a" geändert
+
                     if standort == "B13a":
                         standort = "H13a"
                     
@@ -189,97 +340,114 @@ class App(tk.Tk):
 
         result_df = pd.DataFrame(analysis_result, columns=['Halle', 'Anlage', 'Anzahl', 'Störungskürzel'])
         return result_df.groupby(['Halle', 'Anlage', 'Störungskürzel']).size().reset_index(name='Anzahl')
-
-    # Gesamtauswertung
+    
+    # Funktion für die Gesamtauswertung
     def gesamtauswertung(self):
-        # Überprüfen Sie, ob bereits Daten geladen sind
-        if self.df is not None and not self.df.empty:
+        if hasattr(self, "df") and self.df is not None and not self.df.empty:
             response = messagebox.askyesnocancel("Warnung", "Es gibt bereits geladene Daten. Wenn Sie fortfahren, werden diese Daten überschrieben. Möchten Sie die aktuellen Daten exportieren?")
             if response == True:
-                # Daten exportieren
                 self.export_to_excel()
-                
-                # Liste leeren
-                self.df = pd.DataFrame()
-                
-                # Hier können Sie auch Ihre GUI-Tabelle aktualisieren, falls erforderlich
-                
-                return  # Verlassen Sie die Funktion, nachdem die Daten exportiert wurden
+                self.df = pd.DataFrame() 
+                self.reset()       
+                return  
             elif response == False:
-                return  # Verlassen Sie die Funktion, wenn der Benutzer "Nein" wählt
+                return
             else:
-                return  # Verlassen Sie die Funktion, wenn der Benutzer das Fenster schließt oder "Abbrechen" wählt
+                return  
             
-        # Mehrere Dateien auswählen
         file_paths = filedialog.askopenfilenames(title="Mehrere Exportdateien auswählen",
                                                 filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")])
         if not file_paths:
             return
-
-        # Alle Datenframes in einer Liste sammeln
+        
         dfs = []
         for path in file_paths:
             df = pd.read_excel(path)
             dfs.append(df)
 
-        # Datenframes zusammenführen
         combined_df = pd.concat(dfs, ignore_index=True)
 
-        # Einträge gruppieren und Anzahl summiert
         grouped_df = combined_df.groupby(['Halle', 'Anlage', 'Störungskürzel']).agg({
             'Anzahl': 'sum'
         }).reset_index()
-        
 
-        # Den gruppierten Datenframe speichern
         self.df = grouped_df
+        self.display_data_in_treeview(self.df)
+    
+    # Funktion um Daten in die Tabelle zu laden/darzustellen
+    def display_data_in_treeview(self, df):
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+
+        for index, row in df.iterrows():
+            self.tree.insert("", "end", values=(row['Halle'], row['Anlage'], row['Anzahl'], row['Störungskürzel']))
+    
+    # Funktion, die aufgerufen wird, wenn ein Eintrag in der Treeview ausgewählt wird
+    def on_tree_select(self, event):
+        self.comment_entry.delete(1.0, tk.END)  # Leeren des Textfelds
+        selected = self.tree.focus()
+        values = self.tree.item(selected, 'values')
+        if len(values) < 4:  # Überprüfen Sie, ob die notwendigen Werte vorhanden sind
+            return
+        halle, anlage, anzahl, sk = values[:4]
+        key = (halle, anlage, sk)
+        if key in self.comments:
+            self.comment_entry.insert(tk.END, self.comments[key])
+
+    # Funktion zum Speichern des Kommentars
+    def save_comment(self):
+        selected = self.tree.focus()
+        if not selected:
+            messagebox.showwarning("Kein Eintrag ausgewählt", "Bitte wählen Sie eine Anlage aus, bevor Sie einen Kommentar speichern.")
+            self.comment_entry.delete(1.0, tk.END)
+            return
+
+        values = self.tree.item(selected, 'values')
+        halle, anlage, anzahl, sk = values  # Entfernen Sie "kommentar" von hier
+        key = (halle, anlage, sk)
+        comment = self.comment_entry.get(1.0, tk.END).strip()
+        self.comments[key] = comment
         
-        # Comboboxen aktualisieren
-        self.update_comboboxes()
+    # Funktion zum Löschen des Kommentars
+    def delete_comment(self):
+        selected = self.tree.focus()
+        if not selected:
+            messagebox.showwarning("Kein Eintrag ausgewählt", "Bitte wählen Sie eine Anlage aus, bevor Sie einen Kommentar löschen.")
+            self.comment_entry.delete(1.0, tk.END)
+            return
 
-        # Nun können Sie die Daten in Ihrer GUI-Tabelle anzeigen.
-        self.populate_table()
-
-    # Zusätzliche Methode, um die Tabelle mit Daten zu füllen
-    def populate_table(self):
-        # Die Tabelle leeren
-        for i in self.tree.get_children():
-            self.tree.delete(i)
-
-        # Daten in die Tabelle einfügen
-        for index, row in self.df.iterrows():
-            self.tree.insert("", tk.END, values=(row['Halle'], row['Anlage'], row['Anzahl'], row['Störungskürzel'], row.get('Kommentar', '')))
-
-    def open_csv(self):
-        file_path = filedialog.askopenfilename()
-        if file_path:
-            # Zeige den Dateinamen im Textfeld an
-            filename = file_path.split("/")[-1]
-            self.file_entry.config(state='normal') 
-            self.file_entry.delete(0, tk.END)      
-            self.file_entry.insert(0, filename)     
-            self.file_entry.config(state='readonly')
-
-
-            # Treeview leeren
-            for i in self.tree.get_children():
-                self.tree.delete(i)
-            
-            self.df = self.analyse_meldungsname(file_path)
-            for index, row in self.df.iterrows():
-                self.tree.insert("", tk.END, values=(row['Halle'], row['Anlage'], row['Anzahl'], row['Störungskürzel']))
-            self.update_comboboxes()
-
+        values = self.tree.item(selected, 'values')
+        halle, anlage, anzahl, sk = values  # Entfernen Sie "kommentar" von hier
+        key = (halle, anlage, sk)
+        if key in self.comments:
+            del self.comments[key]
+        self.comment_entry.delete(1.0, tk.END)
+    
+    # Funktionen für das Filtern der Liste
+    # Filterboxen bei Änderungen updaten
     def update_comboboxes(self):
         if self.df is not None:
             hallen = ["Alles"] + sorted(self.df['Halle'].unique())
             sks = ["Alles"] + sorted(self.df['Störungskürzel'].unique())
+            anlagen = ["Alles"] + sorted(self.df['Anlage'].unique())
+            
             self.combo_halle['values'] = hallen
             self.combo_sk['values'] = sks
-
+            self.combo_anlagen['values'] = anlagen
+            
+            # Standardwerte setzen
+            if not self.combo_halle.get():  # Wenn die ComboBox leer ist
+                self.combo_halle.set("Alles")
+            if not self.combo_sk.get():    # Wenn die ComboBox leer ist
+                self.combo_sk.set("Alles")
+            if not self.combo_anlagen.get():  # Wenn die ComboBox leer ist
+                self.combo_anlagen.set("Alles")
+                
+    # Filter logik
     def filter_df(self):
-        halle_filter = self.combo_halle.get()
-        sk_filter = self.combo_sk.get()
+        halle_filter = self.combo_halle.get() or "Alles"  # Setze auf "Alles", wenn es leer ist
+        sk_filter = self.combo_sk.get() or "Alles"      # Setze auf "Alles", wenn es leer ist
+        anlage_filter = self.combo_anlagen.get() or "Alles" # Setze auf "Alles", wenn es leer ist
 
         filtered_df = self.df
 
@@ -287,9 +455,12 @@ class App(tk.Tk):
             filtered_df = filtered_df[filtered_df['Halle'].isin([halle_filter])]
         if sk_filter != "Alles":
             filtered_df = filtered_df[filtered_df['Störungskürzel'].isin([sk_filter])]
+        if anlage_filter!= "Alles":
+            filtered_df = filtered_df[filtered_df['Anlage'].isin([anlage_filter])]
 
-        return filtered_df      
+        return filtered_df
 
+    # Filter anwenden
     def apply_filters(self):
         # Überprüfung, ob eine Datei geladen wurde
         if self.df is None:
@@ -305,119 +476,147 @@ class App(tk.Tk):
         # Die gefilterten Daten anzeigen
         for index, row in filtered_df.iterrows():
             self.tree.insert("", tk.END, values=(row['Halle'], row['Anlage'], row['Anzahl'], row['Störungskürzel']))
+        
+        # Aktualisieren Sie die grafische Auswertung
+        self.graphic_evaluation()
 
-    # Funktion, die aufgerufen wird, wenn ein Eintrag in der Treeview ausgewählt wird
-    def on_tree_select(self, event):
-        self.text_entry.delete(1.0, tk.END)  # Leeren des Textfelds
-        selected = self.tree.focus()
-        values = self.tree.item(selected, 'values')
-        if len(values) < 4:
-            return
-        halle, anlage, anzahl, sk = values
-        key = (halle, anlage, sk)
-        if key in self.comments:
-            self.text_entry.insert(tk.END, self.comments[key])
-
-    # Funktion zum Speichern des Kommentars
-    def save_comment(self):
-        selected = self.tree.focus()
-        if not selected:  # Überprüfen, ob ein Eintrag ausgewählt ist
-            messagebox.showwarning("Kein Eintrag ausgewählt", "Bitte wählen Sie eine Anlage aus, bevor Sie einen Kommentar speichern.")
-            self.text_entry.delete(1.0, tk.END)  # Löscht den Inhalt des Textfeldes
+    # Funktionen für die Graphische Auswertung
+    def graphic_evaluation(self):
+        # Überprüfen, ob eine Datei geladen wurde
+        if self.df is None or self.df.empty:
+            messagebox.showwarning("Fehler", "Bitte laden Sie zuerst eine Datei, bevor Sie die grafische Auswertung anzeigen!")
             return
 
-        values = self.tree.item(selected, 'values')
-        halle, anlage, anzahl, sk = values
-        key = (halle, anlage, sk)
-        comment = self.text_entry.get(1.0, tk.END).strip()
-        self.comments[key] = comment
+        # Vorhandene FigureCanvasTkAgg-Widgets aus dem inner_frame entfernen
+        for widget in self.canvas_widgets:
+            widget.destroy()
+        self.canvas_widgets.clear()
 
-    # Funktion zum Löschen des Kommentars
-    def delete_comment(self):
-        selected = self.tree.focus()
-        if not selected:  # Überprüfen, ob ein Eintrag ausgewählt ist
-            messagebox.showwarning("Kein Eintrag ausgewählt", "Bitte wählen Sie eine Anlage aus, bevor Sie einen Kommentar löschen.")
-            self.text_entry.delete(1.0, tk.END)  # Löscht den Inhalt des Textfeldes
-            return
+        filtered_df = self.filter_df() 
 
-        values = self.tree.item(selected, 'values')
-        halle, anlage, anzahl, sk = values
-        key = (halle, anlage, sk)
-        if key in self.comments:
-            del self.comments[key]
-        self.text_entry.delete(1.0, tk.END)
+        for halle, group in filtered_df.groupby('Halle'):
+            fig, ax = plt.subplots(figsize=(10, 5))
+            group.groupby('Anlage')['Anzahl'].sum().sort_values().plot(kind='barh', ax=ax)
+            ax.set_title(halle)
 
-    # Reset Funktion
-    def reset_program(self):
-        # Treeview leeren
+            canvas = FigureCanvasTkAgg(fig, master=self.inner_frame) 
+            canvas.draw()
+            canvas_widget = canvas.get_tk_widget()
+            canvas_widget.pack(fill=tk.BOTH, expand=1)
+            self.canvas_widgets.append(canvas_widget)
+
+            # Figur schließen, um den Speicherverbrauch zu reduzieren
+            plt.close(fig)
+
+    # Funktion um die Anwendung zurückzusetzen
+    def reset(self):
         for i in self.tree.get_children():
             self.tree.delete(i)
-        
-        # Setzen Sie alle Eingabefelder, Filter und ComboBoxen zurück
-        self.text_entry.delete(1.0, tk.END)
+
+        self.csv_entry.delete(0, tk.END)
         self.combo_halle.set('')
         self.combo_sk.set('')
 
-        # Löschen Sie alle Daten im Hintergrund, die in der Anwendung verwendet werden
         self.df = None
         self.comments = {}
 
-        # Aktualisieren der Comboboxen
         self.combo_halle['values'] = []
         self.combo_sk['values'] = []
 
-        # Dateinamen zurücksetzen
-        self.file_entry.config(state=tk.NORMAL)
-        self.file_entry.delete(0, tk.END)
-        self.file_entry.config(state='readonly')
+        self.csv_entry.config(state=tk.NORMAL)
+        self.csv_entry.delete(0, tk.END)
+        self.csv_entry.config(state=tk.DISABLED)
+        
+        for widget in self.canvas_widgets:
+            widget.destroy()
+        self.canvas_widgets.clear()
 
-    # Funktion zum Sortieren der Anzahl
-    def sort_by_anzahl(self):
-        if self.sort_order == "asc":
-            self.df = self.df.sort_values(by="Anzahl", ascending=False)
-            self.sort_order = "desc"
-        else:
-            self.df = self.df.sort_values(by="Anzahl", ascending=True)
-            self.sort_order = "asc"
+        # Leeren des Canvas (falls notwendig)
+        self.canvas.delete("all")
+        
+        # Zerstöre das aktuelle inner_frame
+        self.inner_frame.destroy()
 
-        # Filtermethode aufrufen, um die gefilterte DataFrame zu erhalten
-        filtered_df = self.filter_df()
-
-        # Treeview leeren
-        for i in self.tree.get_children():
-            self.tree.delete(i)
-
-        # Aktualisierte Daten anzeigen
-        for index, row in filtered_df.iterrows():
-            self.tree.insert("", tk.END, values=(row['Halle'], row['Anlage'], row['Anzahl'], row['Störungskürzel']))
-
-    # Funktion zum Export der Daten
-    def export_to_excel(self):
-        # Überprüfung, ob eine Datei geladen wurde
-        if self.df is None:
-            messagebox.showwarning("Fehler", "Bitte laden Sie zuerst eine Datei, bevor Sie exportieren!")
+        # Erstelle ein neues inner_frame und binde es erneut an das <Configure>-Event
+        self.inner_frame = tk.Frame(self.canvas)
+        self.canvas.create_window((0, 0), window=self.inner_frame, anchor='nw')
+        self.inner_frame.bind('<Configure>', self.on_frame_configure)
+        
+        # Messagebox anzeigen bei erfolgreichen zurücksetzen
+        messagebox.showinfo("Erfolg", "Anwendung zurückgesetzt!")
+            
+    # Funktionen für den Export
+    # Funktion für den grafischen Export
+    def graphic_evaluation_export(self):
+        # Überprüfen, ob eine Datei geladen wurde
+        if self.df is None or self.df.empty:
+            messagebox.showwarning("Fehler", "Bitte laden Sie zuerst eine Datei, bevor Sie die grafische Auswertung exportieren!")
             return
 
-        # Erstellen Sie eine Kopie der DataFrame, damit die Originaldaten nicht geändert werden
-        export_df = self.df.copy()
+        # Eine Datei zum Speichern der Grafiken auswählen
+        file_path = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")])
+        if not file_path:  # Wenn der Benutzer abbricht
+            return
 
-        # Eine leere "Kommentar" Spalte zur DataFrame hinzufügen
-        export_df['Kommentar'] = ""
+        pdf = matplotlib.backends.backend_pdf.PdfPages(file_path)
 
-        # Füllen Sie die 'Kommentar'-Spalte mit den gespeicherten Kommentaren
-        for index, row in export_df.iterrows():
-            key = (row['Halle'], row['Anlage'], row['Störungskürzel'])
-            if key in self.comments:
-                export_df.at[index, 'Kommentar'] = self.comments[key]
+        # Erstellen einer Titelseite
+        title_fig = plt.figure(figsize=(10, 5))
+        title_fig.text(0.5, 0.5, "Export vom " + datetime.datetime.now().strftime("%Y-%m-%d"), ha="center", va="center", fontsize=16)
 
-        # Exportieren Sie die DataFrame in eine Excel-Datei
+        # Füge die Titelseite zum PDF hinzu
+        pdf.savefig(title_fig)
+        plt.close(title_fig) 
+
+        filtered_df = self.filter_df()
+
+        for halle, group in filtered_df.groupby('Halle'):
+            fig, ax = plt.subplots(figsize=(10, 5))
+            group.groupby('Anlage')['Anzahl'].sum().sort_values().plot(kind='barh', ax=ax)
+            ax.set_title(halle)
+
+            # Füge diese Figur zum PDF hinzu
+            pdf.savefig(fig)
+
+            # Figur schließen, um den Speicherverbrauch zu reduzieren
+            plt.close(fig)
+
+        # Schließe das PDF-Dokument
+        pdf.close()
+
+        messagebox.showinfo("Erfolg", "Grafische Auswertungen wurden erfolgreich exportiert!")
+
+    # Funktion um die ausgewerteten Daten zu exportieren
+    def export_to_excel(self):
+        if not self.tree.get_children():
+            messagebox.showwarning("Keine Daten", "Es gibt keine Daten zum Exportieren!")
+            return
+
+        # Eine Liste für die gesammelten Daten erstellen
+        rows = []
+
+        # Durchlaufen Sie jeden Eintrag im Treeview
+        for item in self.tree.get_children():
+            row_data = list(self.tree.item(item, 'values'))
+            halle, anlage, anzahl, sk = row_data
+            comment = self.comments.get((halle, anlage, sk), "")
+            row_data.append(comment)
+            rows.append(row_data)
+
+        # Konvertieren Sie die Daten in einen DataFrame
+        columns = ['Halle', 'Anlage', 'Anzahl', 'Störungskürzel', 'Kommentar']
+        df = pd.DataFrame(rows, columns=columns)
+
+        # Fragt den Benutzer, wohin die Excel-Datei gespeichert werden soll
         file_path = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")])
-        if file_path:
-            with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
-                export_df.to_excel(writer, index=False)
-                
-            messagebox.showinfo("Erfolgreicher Export", f"Die Daten wurden erfolgreich nach {file_path} exportiert!")
+        if not file_path:
+            return
 
+        # Speichern Sie den DataFrame als Excel-Datei
+        df.to_excel(file_path, index=False)
+        messagebox.showinfo("Erfolg", "Die Daten wurden erfolgreich exportiert!")
+
+    
 if __name__ == "__main__":
     app = App()
     app.mainloop()
